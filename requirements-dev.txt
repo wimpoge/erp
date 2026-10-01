@@ -1,0 +1,3 @@
+-r erp/requirements.txt
+-r pos/requirements.txt
+pytest>=8.3
