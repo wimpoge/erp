@@ -1,5 +1,8 @@
+from collections.abc import Iterator
+
+from fastapi import Request
 from sqlalchemy import Engine, create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 
 def make_engine(url: str) -> Engine:
@@ -26,3 +29,9 @@ def make_engine(url: str) -> Engine:
 
 def make_session_factory(url: str) -> sessionmaker:
     return sessionmaker(make_engine(url), expire_on_commit=False)
+
+
+def get_db(request: Request) -> Iterator[Session]:
+    """FastAPI dependency: one session per request, shared by every dependency that asks."""
+    with request.app.state.session_factory() as db:
+        yield db

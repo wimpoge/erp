@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     # After this many failed pushes an order stops retrying and needs a manual push.
     push_max_attempts: int = 8
     cors_origins: list[str] = ["http://localhost:3000"]
+    session_hours: int = 12  # one long shift
+    # Set true behind HTTPS so the session cookie is never sent in clear text.
+    cookie_secure: bool = False
 
 
 @lru_cache

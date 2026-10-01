@@ -97,6 +97,41 @@ class ProductStock(Base):
     on_hand: Mapped[int] = mapped_column(default=0)
 
 
+# ---------------------------------------------------------------- staff (owned by the POS)
+
+
+class User(Base):
+    __tablename__ = "user"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(40), unique=True)
+    full_name: Mapped[str] = mapped_column(String(120))
+    password_hash: Mapped[str] = mapped_column(String(200))
+    role: Mapped[str] = mapped_column(String(10), default="cashier")  # cashier | admin
+    # The store a cashier sells in. Admins may have none: they can work in every store.
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("location.id"))
+    active: Mapped[bool] = mapped_column(default=True)
+    failed_logins: Mapped[int] = mapped_column(default=0)
+    locked_until: Mapped[datetime | None]
+    last_login_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    location: Mapped[Location | None] = relationship()
+
+
+class StaffSession(Base):
+    """Server-side login session. Only a hash of the cookie value is stored."""
+
+    __tablename__ = "staff_session"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), index=True)
+    expires_at: Mapped[datetime]
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    user: Mapped[User] = relationship()
+
+
 # ---------------------------------------------------------------- transactions (made here)
 
 
@@ -110,6 +145,7 @@ class Order(Base):
     location_id: Mapped[int] = mapped_column(ForeignKey("location.id"))
     register_id: Mapped[int | None] = mapped_column(ForeignKey("register.id"))
     customer_id: Mapped[int | None] = mapped_column(ForeignKey("customer.id"))
+    cashier_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"))
     subtotal: Mapped[int]
     discount: Mapped[int] = mapped_column(default=0)
     total: Mapped[int]
@@ -128,6 +164,7 @@ class Order(Base):
     location: Mapped[Location] = relationship()
     register: Mapped[Register | None] = relationship()
     customer: Mapped[Customer | None] = relationship()
+    cashier: Mapped[User | None] = relationship()
     lines: Mapped[list["OrderLine"]] = relationship(back_populates="order", order_by="OrderLine.id")
     payments: Mapped[list["Payment"]] = relationship(back_populates="order", order_by="Payment.id")
     push_log: Mapped[list["PushAttempt"]] = relationship(order_by="PushAttempt.id")

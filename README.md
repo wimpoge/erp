@@ -10,9 +10,15 @@ other API, and the data all misbehave.
   exposes only public UUIDs, paginates every list, and takes sales orders idempotently.
 - **pos/**: POS backend (FastAPI + SQLAlchemy). Mirrors the ERP's master data into its
   own tables, sells, and pushes each sale back to the ERP.
-- **web/**: the till (Next.js + Tailwind): product grid with barcode search,
-  cart, customer-group discounts, cash/card/QRIS payment with change, order history with
-  ERP push status, and a sync dashboard.
+- **web/**: the till (Next.js + Tailwind). Staff log in; cashiers sell in their own
+  store, admins also get a back office.
+  - **Till**: scan or search, tap to add, member discounts, a checkout with suggested
+    cash amounts and a big "give change" screen, printable 80 mm receipts. Keyboard
+    shortcuts (F2 search, F9 pay, Enter to confirm) and a bottom-sheet cart on phones.
+  - **Today's sales**: totals per payment method (cash in drawer = paid minus change),
+    search, reprint.
+  - **Back office** (admins): sales not yet received by head office (with retry), the
+    head-office sync, and staff accounts (add, reset password, unlock, deactivate).
 
 All data is generated with Faker; nothing here comes from a real company.
 
@@ -40,17 +46,27 @@ cd pos && ../.venv/Scripts/python -m pos_service.cli init-db && cd ..
 cd erp && ../.venv/Scripts/python -m uvicorn --factory erp_service.main:create_app --port 8001
 cd pos && ../.venv/Scripts/python -m uvicorn --factory pos_service.main:create_app --port 8000
 
+# once the ERP is up: first sync, then demo staff accounts
+cd pos && ../.venv/Scripts/python -m pos_service.cli sync && ../.venv/Scripts/python -m pos_service.cli demo-users
+
 # third terminal
 cd web && npm install && npm run dev        # http://localhost:3000
 ```
 
-Open **ERP sync → Sync now**, then sell on the **Till**. API docs: http://localhost:8000/docs
-and http://localhost:8001/docs.
+Log in with a demo account (one click on the login page):
+
+| Username | Password | Can |
+|---|---|---|
+| `kasir1`, `kasir2`, `kasir3` | `kasir123` | sell in one store each |
+| `admin` | `admin123` | every store + back office |
+
+Real accounts: `python -m pos_service.cli create-user budi --name "Budi Santoso" --password ... --store KG01`
+(or `--admin`), or Back office → Staff. API docs: http://localhost:8000/docs and http://localhost:8001/docs.
 
 ### With Docker (PostgreSQL)
 
 ```bash
-docker compose up --build          # ERP :8001, POS :8000, Postgres :5432, push worker
+docker compose up --build          # ERP :8001, POS :8000 (synced, demo staff), Postgres, push worker
 cd web && npm install && npm run dev
 ```
 
@@ -116,13 +132,24 @@ sync in between doesn't make sold items reappear.
 **Tokens renew themselves.** The ERP client caches its token, renews it early, and on a
 401/403 fetches a new one and retries once.
 
+**Staff sessions live on the server.** Passwords are scrypt-hashed with a per-user salt.
+Logging in creates a random session token; the browser gets it as an `httpOnly`,
+`SameSite=Lax` cookie and the database stores only its SHA-256, so a database leak does
+not leak usable sessions, and logging out really ends the session. The till reaches the
+API through a Next.js rewrite (same origin), so page scripts can never read the token.
+Five wrong passwords lock an account for five minutes; a wrong username and a wrong
+password get the same answer and take the same time.
+
+**The store boundary is enforced by the API, not the UI.** A cashier's requests for
+another store's products, sales or till are refused, whatever the page sends.
+
 **Prices come from the server.** The till sends product ids and quantities; prices,
 discounts and totals are computed by the POS from synced data.
 
 ## Roadmap
 
 - Alembic migrations (tables are created with `create_all` for now)
-- Staff login (JWT), roles (cashier / admin), shifts with opening float and cash movements
+- Shifts: opening float, cash in/out, end-of-shift count against "cash in drawer"
 - Customers created at the till and pushed to the ERP
 - Promotions and vouchers
 - PWA install and deployment on HTTPS

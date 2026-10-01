@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Nav from "./nav";
+import { ToastProvider } from "@/components/toast";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,16 +14,21 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "my-pos",
-  description: "Point of sale synced with a mock ERP",
+  title: "Kios Gawai POS",
+  description: "Point of sale for Kios Gawai stores",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#0f172a",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-slate-50 text-slate-900">
-        <Nav />
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">{children}</main>
+      <body className="min-h-full bg-slate-100 text-slate-900">
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

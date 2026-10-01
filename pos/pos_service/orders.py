@@ -26,6 +26,7 @@ from .models import (
     ProductStock,
     PushAttempt,
     Register,
+    User,
     utcnow,
 )
 
@@ -55,7 +56,7 @@ class OrderIn(BaseModel):
     payments: list[PaymentIn] = Field(min_length=1)
 
 
-def create_order(db: Session, data: OrderIn) -> Order:
+def create_order(db: Session, data: OrderIn, cashier: User | None = None) -> Order:
     location = db.get(Location, data.location_id)
     if location is None or not location.active:
         raise OrderError(404, "store not found")
@@ -74,7 +75,8 @@ def create_order(db: Session, data: OrderIn) -> Order:
     for line in data.lines:
         qty_by_product[line.product_id] += line.qty
 
-    order = Order(location=location, register=register, customer=customer, subtotal=0, total=0, paid=0)
+    order = Order(location=location, register=register, customer=customer, cashier=cashier,
+                  subtotal=0, total=0, paid=0)
     for product_id, qty in qty_by_product.items():
         product = db.get(Product, product_id)
         if product is None or not product.active:

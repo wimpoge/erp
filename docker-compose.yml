@@ -23,17 +23,24 @@ services:
     ports: ["8001:8001"]
     depends_on:
       db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 2s
+      retries: 30
 
   pos:
     build: ./pos
     environment: &pos-env
       POS_DATABASE_URL: postgresql+psycopg://app:app@db:5432/pos
       POS_ERP_BASE_URL: http://erp:8001
-    command: sh -c "python -m pos_service.cli init-db && uvicorn --factory pos_service.main:create_app --host 0.0.0.0 --port 8000"
+    command: >-
+      sh -c "python -m pos_service.cli init-db && python -m pos_service.cli sync > /dev/null &&
+      python -m pos_service.cli demo-users &&
+      uvicorn --factory pos_service.main:create_app --host 0.0.0.0 --port 8000"
     ports: ["8000:8000"]
     depends_on:
       db: {condition: service_healthy}
-      erp: {condition: service_started}
+      erp: {condition: service_healthy}
 
   # Retries queued ERP pushes once a minute.
   pos-push-worker:
