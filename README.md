@@ -1,155 +1,122 @@
-# my-pos: a point of sale that syncs with an ERP
+# Nusantara ERP
 
-A retail point-of-sale (till, orders, ERP sync) for a small chain of phone and
-accessories stores, plus a **mock ERP** it integrates with. Built to show the part of POS
-work that is usually hardest: keeping two systems in agreement when the network, the
-other API, and the data all misbehave.
+A web ERP for a multi-warehouse retailer of phones and accessories: **inventory, purchasing,
+sales, finance (receivables and payables) and reporting**, with role-based access and an
+integration API for outside systems such as a POS or a web shop.
 
-- **erp/**: mock ERP (FastAPI). It is the master for stores, registers, customers,
-  customer groups, products, prices and stock. It issues client-credentials tokens,
-  exposes only public UUIDs, paginates every list, and takes sales orders idempotently.
-- **pos/**: POS backend (FastAPI + SQLAlchemy). Mirrors the ERP's master data into its
-  own tables, sells, and pushes each sale back to the ERP.
-- **web/**: the till (Next.js + Tailwind). Staff log in; cashiers sell in their own
-  store, admins also get a back office.
-  - **Till**: scan or search, tap to add, member discounts, a checkout with suggested
-    cash amounts and a big "give change" screen, printable 80 mm receipts. Keyboard
-    shortcuts (F2 search, F9 pay, Enter to confirm) and a bottom-sheet cart on phones.
-  - **Today's sales**: totals per payment method (cash in drawer = paid minus change),
-    search, reprint.
-  - **Back office** (admins): sales not yet received by head office (with retry), the
-    head-office sync, and staff accounts (add, reset password, unlock, deactivate).
+**Stack:** Next.js 16 · React 19 · TypeScript · shadcn/ui (Base UI) · TanStack Query · Recharts —
+FastAPI · SQLAlchemy 2 · Alembic · PostgreSQL · pytest
 
-All data is generated with Faker; nothing here comes from a real company.
+All company, people and product data is generated with Faker.
 
-```mermaid
-flowchart LR
-  till["Till (Next.js)"] -->|REST| pos["POS API (FastAPI)"]
-  pos --> posdb[(POS database)]
-  pos -->|"1. sync: GET lists (paged, token)"| erp["Mock ERP (FastAPI)"]
-  pos -->|"2. push: POST sales order (idempotent)"| erp
-  erp --> erpdb[(ERP database)]
-  worker["push worker (every 60 s)"] --> pos
-```
+## What it does
 
-## Run it
+| Module | Highlights |
+|---|---|
+| **Sales** | Customers and groups (default discounts, payment terms, credit limits) · sales orders: draft → confirmed → (partly) delivered → invoiced · credit-limit check on confirmation · stock reservation |
+| **Purchasing** | Suppliers · purchase orders: draft → sent → (partly) received · supplier bills matched to what was received (three-way match) |
+| **Inventory** | Products with **moving-average cost** · stock per warehouse with *on hand / reserved / available / incoming* · a complete movement ledger · transfers between warehouses · stock counts · reorder points and low-stock alerts |
+| **Finance** | Customer invoices and supplier bills · partial payments · overdue tracking · receivables and payables **aging** |
+| **Reports** | Dashboard (30-day sales, gross profit, receivables, payables, stock value, low stock, activity) · sales and cost of goods by month · sales by category · top products and customers · stock value per warehouse |
+| **Admin** | Users with six roles (admin, manager, sales, purchasing, warehouse, accountant) · API clients · company settings (VAT rate) · an audit trail on every document |
+| **Integration API** | Client-credentials tokens · paginated lists that expose only public UUIDs · sales-order import that is **idempotent** on the caller's `external_id` |
 
-### Without Docker (SQLite files)
+Try it with the demo accounts on the login page; each role sees only what it may do.
 
-```bash
-python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt   # bin/ on macOS/Linux
+## Design decisions
 
-cd erp && ../.venv/Scripts/python -m erp_service.cli seed && cd ..
-cd pos && ../.venv/Scripts/python -m pos_service.cli init-db && cd ..
+- **Stock changes only through the ledger.** Every receipt, delivery, transfer and count posts a
+  `stock_move` with its unit cost and source document; `stock_level` is the running sum. A
+  database `CHECK` keeps on-hand from going negative, and a delivery that would do so is
+  refused with a message saying how much is there.
+- **Moving-average costing.** Each receipt blends its cost into the product's average; deliveries
+  record the average at shipping time as cost of goods sold, so gross profit is exact per month.
+- **Documents follow real workflows.** Orders can be received or delivered in several parts;
+  invoices and bills only cover what was actually delivered or received; a cancelled invoice
+  frees its quantities to be invoiced again. Confirmed documents can't be edited.
+- **Credit control.** Confirming a sales order checks open invoices plus uninvoiced orders against
+  the customer's credit limit.
+- **Gapless document numbers** (`SO-2026-00042`) from a locked sequence row, safe under concurrency.
+- **Permissions, not roles, in the code.** Endpoints ask for `sales.deliver` or `finance.write`;
+  roles are just bundles of permissions. The UI hides what a role can't do; the API enforces it.
+- **Sessions on the server.** scrypt password hashes, a random session token in an `httpOnly`,
+  `SameSite=Lax` cookie with only its SHA-256 stored, lockout after five failed attempts. The
+  Next.js app proxies `/api/*` to FastAPI, so the browser only ever talks to one origin.
+- **Idempotent integration.** An outside system retrying a sales-order import with the same
+  `external_id` gets the first order back instead of a duplicate; a unique constraint backs it
+  up when two retries race.
+- **Realistic demo data.** A year of history is generated *through the same services the API
+  uses* (late payments, short supplier deliveries, store replenishment, supplier backorders),
+  so every screen agrees with every other screen.
 
-# two terminals
-cd erp && ../.venv/Scripts/python -m uvicorn --factory erp_service.main:create_app --port 8001
-cd pos && ../.venv/Scripts/python -m uvicorn --factory pos_service.main:create_app --port 8000
+## Run it locally
 
-# once the ERP is up: first sync, then demo staff accounts
-cd pos && ../.venv/Scripts/python -m pos_service.cli sync && ../.venv/Scripts/python -m pos_service.cli demo-users
-
-# third terminal
-cd web && npm install && npm run dev        # http://localhost:3000
-```
-
-Log in with a demo account (one click on the login page):
-
-| Username | Password | Can |
-|---|---|---|
-| `kasir1`, `kasir2`, `kasir3` | `kasir123` | sell in one store each |
-| `admin` | `admin123` | every store + back office |
-
-Real accounts: `python -m pos_service.cli create-user budi --name "Budi Santoso" --password ... --store KG01`
-(or `--admin`), or Back office → Staff. API docs: http://localhost:8000/docs and http://localhost:8001/docs.
-
-### With Docker (PostgreSQL)
+Requirements: Python 3.12, Node 20+.
 
 ```bash
-docker compose up --build          # ERP :8001, POS :8000 (synced, demo staff), Postgres, push worker
-cd web && npm install && npm run dev
+# backend (SQLite by default)
+python -m venv .venv
+.venv/Scripts/pip install -r backend/requirements-dev.txt     # macOS/Linux: .venv/bin/pip
+cd backend
+../.venv/Scripts/python -m erp.cli seed                        # migrate + a year of demo data (~30 s)
+../.venv/Scripts/python -m uvicorn app:app --port 8000        # API docs: http://localhost:8000/docs
+
+# frontend, in a second terminal
+cd web
+npm install
+npm run dev                                                   # http://localhost:3000
 ```
 
-### Try the failure paths
-
-```bash
-ERP_FAIL_RATE=1 docker compose up erp   # or set ERP_FAIL_RATE=1 before starting the ERP locally
-```
-
-Sales still go through at the till; they show as **pending** with the error and the next
-retry time. Set the rate back to 0 and the worker (or **Orders → Retry due pushes**) sends
-them, without creating duplicates.
+Log in with a demo account (one click on the login page), password `demo1234`.
 
 ### Tests
 
 ```bash
-.venv/Scripts/python -m pytest
+cd backend
+../.venv/Scripts/python -m pytest                                        # SQLite
+ERP_TEST_DATABASE_URL=postgresql://... ../.venv/Scripts/python -m pytest # same tests on Postgres
 ```
 
-The POS tests run against the real ERP app in-process (FastAPI's TestClient is an
-`httpx.Client`), so they cover the actual HTTP contract: tokens, pagination, status
-codes, and JSON shapes.
+The tests drive the HTTP API end to end: purchase-to-pay, order-to-cash, partial deliveries,
+moving-average cost, credit limits, transfers and counts, aging, permissions per role, login
+lockout and the idempotent import.
 
-## Design decisions
+## Deploy for free (Vercel + Neon)
 
-These come from problems I ran into integrating a real POS with a real ERP.
+Both parts run on Vercel's free Hobby plan; the database on Neon's free tier.
 
-**The POS owns its primary keys.** Every mirrored table numbers its own rows; the ERP
-record is linked by `erp_public_id` (a UUID). The ERP can renumber, merge, or hide its
-internal ids without breaking a single foreign key in the POS.
+1. **Database.** Create a project at [neon.tech](https://neon.tech) and copy the *pooled*
+   connection string.
+2. **Schema and demo data**, from your machine:
+   ```bash
+   cd backend
+   ERP_DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require" ../.venv/Scripts/python -m erp.cli seed
+   ```
+   (`python -m erp.cli migrate` alone creates the schema without demo data;
+   `python -m erp.cli create-admin you@company.com "Your Name"` adds a real admin.)
+3. **Backend.** In Vercel, *Add New → Project*, import this repository, set **Root Directory** to
+   `backend` (Vercel detects FastAPI from `app.py`), and add the environment variables:
+   `ERP_DATABASE_URL` (the Neon URL), `ERP_SERVERLESS=true`, `ERP_COOKIE_SECURE=true`.
+   Deploy, then check `https://<backend>.vercel.app/api/health`.
+4. **Frontend.** Import the same repository again as a second project with **Root Directory**
+   `web`, and set `API_URL=https://<backend>.vercel.app`. Deploy and open the URL.
 
-**One generic mirror for every list** ([`pos/pos_service/sync.py`](pos/pos_service/sync.py)).
-Shape the ERP row, match it on a key, insert or update only the fields that changed, then
-deactivate the rows the ERP no longer returns (or delete them, for stock). Every change is
-a `sync_event` row, so "why did this price change?" has an answer.
+The browser only talks to the frontend domain; Vercel forwards `/api/*` to the backend, so the
+login cookie stays first-party.
 
-**An empty answer never empties a table.** If an API change or a bad filter makes the
-ERP return 0 rows, the naive mirror deletes everything. Here the step is marked
-`skipped` and the existing rows are kept.
+## Layout
 
-**One bad row does not stop the run.** Each row is upserted inside a savepoint. A row
-that fails is rolled back alone and logged with its error. A failed list (ERP down)
-marks that step `failed` and the run carries on with the next list.
-
-**Rows other data points at are deactivated, not deleted.** A customer removed in the
-ERP still has orders in the POS.
-
-**The till never waits for the ERP.** A sale is committed locally first; the push to the
-ERP runs after the response (background task), and then from a worker on a backoff
-schedule (1, 2, 4 … 60 minutes).
-
-**Pushes are idempotent.** Every order has an `external_id` UUID. Before creating, the
-POS asks the ERP whether it already has that id; the ERP also enforces it as unique. A
-push whose answer was lost never becomes a duplicate sales order.
-
-**Retry only what can succeed.** 5xx, timeouts, 429 and auth errors are retried; a 422
-(e.g. the store was closed in the ERP) marks the order `failed` for a person to look at.
-
-**Sync does not hand back sold stock.** Until the ERP has received a sale, its stock is
-still higher than the POS's. The stock mirror subtracts units in unpushed orders, so a
-sync in between doesn't make sold items reappear.
-
-**Tokens renew themselves.** The ERP client caches its token, renews it early, and on a
-401/403 fetches a new one and retries once.
-
-**Staff sessions live on the server.** Passwords are scrypt-hashed with a per-user salt.
-Logging in creates a random session token; the browser gets it as an `httpOnly`,
-`SameSite=Lax` cookie and the database stores only its SHA-256, so a database leak does
-not leak usable sessions, and logging out really ends the session. The till reaches the
-API through a Next.js rewrite (same origin), so page scripts can never read the token.
-Five wrong passwords lock an account for five minutes; a wrong username and a wrong
-password get the same answer and take the same time.
-
-**The store boundary is enforced by the API, not the UI.** A cashier's requests for
-another store's products, sales or till are refused, whatever the page sends.
-
-**Prices come from the server.** The till sends product ids and quantities; prices,
-discounts and totals are computed by the POS from synced data.
-
-## Roadmap
-
-- Alembic migrations (tables are created with `create_all` for now)
-- Shifts: opening float, cash in/out, end-of-shift count against "cash in drawer"
-- Customers created at the till and pushed to the ERP
-- Promotions and vouchers
-- PWA install and deployment on HTTPS
+```
+backend/
+  app.py              entry point (uvicorn / Vercel)
+  erp/models/         30 tables: catalog, partners, inventory, purchasing, sales, finance, …
+  erp/services/       business rules: inventory ledger, purchasing, sales, finance, reports
+  erp/api/            FastAPI routers, one per module (+ integration API)
+  erp/seed.py         demo company with a year of history
+  migrations/         Alembic
+  tests/              end-to-end API tests
+web/
+  src/app/(erp)/      one folder per module, list / detail / form pages
+  src/components/erp/ data table, order form, line editor, dialogs, charts
+  src/components/ui/  shadcn/ui components
+```

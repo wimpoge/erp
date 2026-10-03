@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Optimistic check only: no session cookie means straight to the login page. The POS API
+// Optimistic check only: no session cookie means straight to the login page. The ERP API
 // still validates the session on every request.
 export function proxy(request: NextRequest) {
-  const loggedIn = request.cookies.has("pos_session");
+  const loggedIn = request.cookies.has("erp_session");
   const { pathname, search } = request.nextUrl;
 
   if (!loggedIn && pathname !== "/login") {

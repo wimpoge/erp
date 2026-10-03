@@ -1,118 +1,130 @@
 "use client";
 
-import { Eye, EyeOff, Store } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { Button, Field, inputClass } from "@/components/ui";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
 
-const DEMO_ACCOUNTS = [
-  { username: "kasir1", password: "kasir123", label: "Cashier · Jakarta Selatan" },
-  { username: "admin", password: "admin123", label: "Admin · all stores" },
+const DEMO = [
+  { email: "admin@example.com", role: "Administrator", note: "everything, incl. users" },
+  { email: "manager@example.com", role: "Manager", note: "all modules" },
+  { email: "sales@example.com", role: "Sales", note: "customers & sales orders" },
+  { email: "purchasing@example.com", role: "Purchasing", note: "suppliers & purchase orders" },
+  { email: "warehouse@example.com", role: "Warehouse", note: "receive, ship, transfer, count" },
+  { email: "finance@example.com", role: "Accountant", note: "invoices, bills, payments" },
 ];
+const DEMO_PASSWORD = "demo1234";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("");
+  const queryClient = useQueryClient();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  async function submit(e?: FormEvent, account?: { username: string; password: string }) {
-    e?.preventDefault();
-    const creds = account ?? { username, password };
-    if (!creds.username || !creds.password) {
-      setError("Enter your username and password.");
-      return;
-    }
-    setBusy(true);
+  async function login(creds: { email: string; password: string }) {
+    setBusy(creds.email);
     setError(null);
     try {
       await api("/api/auth/login", { method: "POST", json: creds });
+      queryClient.removeQueries();
       const next = new URLSearchParams(window.location.search).get("next");
-      // Only same-site paths, never an absolute URL from the query string.
       router.replace(next?.startsWith("/") && !next.startsWith("//") ? next : "/");
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(false);
+    } catch (e) {
+      setError(errorMessage(e));
+      setBusy(null);
     }
   }
 
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    login({ email, password });
+  }
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 to-slate-700 p-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center text-white">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
-            <Store className="h-7 w-7" />
-          </div>
-          <h1 className="text-2xl font-semibold">Kios Gawai POS</h1>
-          <p className="text-sm text-slate-300">Log in to start selling</p>
+    <div className="flex min-h-svh items-center justify-center bg-muted p-4 md:p-10">
+      <div className="flex w-full max-w-md flex-col gap-6">
+        <div className="flex items-center gap-2 self-center font-semibold">
+          <div className="flex size-7 items-center justify-center rounded-md bg-primary text-sm text-primary-foreground">N</div>
+          Nusantara ERP
         </div>
-
-        <form onSubmit={submit} className="space-y-4 rounded-2xl bg-white p-6 shadow-xl">
-          <Field label="Username">
-            <input
-              className={inputClass}
-              autoFocus
-              autoComplete="username"
-              autoCapitalize="none"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </Field>
-          <Field label="Password">
-            <div className="relative">
-              <input
-                className={`${inputClass} pr-11`}
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((s) => !s)}
-                className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 hover:text-slate-700"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-          </Field>
-          {error && (
-            <p role="alert" className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {error}
-            </p>
-          )}
-          <Button type="submit" size="lg" className="w-full" loading={busy}>
-            Log in
-          </Button>
-        </form>
-
-        <div className="rounded-2xl bg-white/10 p-4 text-sm text-slate-200">
-          <p className="mb-2 font-medium text-white">Demo accounts</p>
-          <div className="space-y-1.5">
-            {DEMO_ACCOUNTS.map((a) => (
-              <button
-                key={a.username}
-                disabled={busy}
-                onClick={() => {
-                  setUsername(a.username);
-                  setPassword(a.password);
-                  submit(undefined, a);
-                }}
-                className="flex w-full items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-left hover:bg-white/15"
-              >
-                <span>
-                  <span className="font-mono text-white">{a.username}</span> / <span className="font-mono">{a.password}</span>
-                </span>
-                <span className="text-xs text-slate-300">{a.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-xl">Welcome back</CardTitle>
+            <CardDescription>Log in with your work email</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={submit}>
+              <FieldGroup>
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+                <Field>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="username"
+                    placeholder="you@company.com"
+                    required
+                    autoFocus
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <Button type="submit" disabled={busy !== null}>
+                    {busy === email && <Spinner />} Log in
+                  </Button>
+                </Field>
+                <FieldSeparator>Or try a demo role</FieldSeparator>
+                <div className="grid gap-2">
+                  {DEMO.map((d) => (
+                    <Button
+                      key={d.email}
+                      type="button"
+                      variant="outline"
+                      className="h-auto justify-between py-2"
+                      disabled={busy !== null}
+                      onClick={() => login({ email: d.email, password: DEMO_PASSWORD })}
+                    >
+                      <span className="flex items-center gap-2">
+                        {busy === d.email && <Spinner />}
+                        <Badge variant="secondary">{d.role}</Badge>
+                      </span>
+                      <span className="truncate text-xs font-normal text-muted-foreground">{d.note}</span>
+                    </Button>
+                  ))}
+                </div>
+                <FieldDescription className="text-center">
+                  Demo accounts use the password <code>{DEMO_PASSWORD}</code>. Data resets from time to time.
+                </FieldDescription>
+              </FieldGroup>
+            </form>
+          </CardContent>
+        </Card>
       </div>
-    </main>
+    </div>
   );
 }
