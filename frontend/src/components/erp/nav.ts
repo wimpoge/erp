@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Package,
   ReceiptText,
+  Tag,
   Settings2,
   ShoppingCart,
   Truck,
@@ -35,6 +36,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: "Sales orders", href: "/sales/orders", icon: ShoppingCart, permission: "sales.read" },
       { title: "Customers", href: "/sales/customers", icon: Users, permission: "sales.read" },
+      { title: "Promotions", href: "/sales/promotions", icon: Tag, permission: "sales.read" },
     ],
   },
   {

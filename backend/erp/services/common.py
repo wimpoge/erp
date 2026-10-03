@@ -105,6 +105,10 @@ DEFAULT_SETTINGS = {
     "bank_holder": "",
     "tax_rate": 11,
     "currency": "IDR",
+    # Loyalty at the POS tills: one point per this much spent (0: no points), and what a point
+    # is worth when spent.
+    "loyalty_earn_per": 10_000,
+    "loyalty_point_value": 100,
 }
 
 

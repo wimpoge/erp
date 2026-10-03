@@ -10,7 +10,7 @@ from erp.models import Base, Category, Customer, CustomerGroup, Product, Supplie
 from erp.services.auth import hash_password
 
 PASSWORD = "password123"
-ROLES = ("admin", "manager", "sales", "purchasing", "warehouse", "accountant")
+ROLES = ("admin", "manager", "sales", "purchasing", "warehouse", "accountant", "cashier")
 
 
 @pytest.fixture

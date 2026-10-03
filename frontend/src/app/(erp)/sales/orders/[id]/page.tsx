@@ -157,6 +157,7 @@ export default function SalesOrderPage() {
                       <TableHead className="text-right">Ordered</TableHead>
                       <TableHead className="text-right">Delivered</TableHead>
                       <TableHead className="text-right">Invoiced</TableHead>
+                      {o.returns.length > 0 && <TableHead className="text-right">Returned</TableHead>}
                       <TableHead className="text-right">Price</TableHead>
                       <TableHead className="text-right">Disc.</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
@@ -180,6 +181,7 @@ export default function SalesOrderPage() {
                           <TableCell className="text-right tabular-nums">{qty(l.qty)}</TableCell>
                           <TableCell className="text-right tabular-nums">{qty(l.qty_delivered)}</TableCell>
                           <TableCell className="text-right tabular-nums">{qty(l.qty_invoiced)}</TableCell>
+                          {o.returns.length > 0 && <TableCell className="text-right tabular-nums">{qty(l.qty_returned)}</TableCell>}
                           <TableCell className="text-right tabular-nums">{money(l.unit_price)}</TableCell>
                           <TableCell className="text-right tabular-nums">{l.discount_pct ? `${l.discount_pct}%` : "—"}</TableCell>
                           <TableCell className="text-right font-medium tabular-nums">{money(l.line_total)}</TableCell>
@@ -195,8 +197,14 @@ export default function SalesOrderPage() {
                   { label: "Subtotal", value: money(o.subtotal) },
                   { label: `VAT ${o.tax_rate}%`, value: money(o.tax) },
                   { label: "Total", value: money(o.total), strong: true },
+                  ...(o.returns.length
+                    ? [{ label: "Refunded", value: `−${money(o.returns.reduce((s, r) => s + r.total, 0))}` }]
+                    : []),
                 ]}
               />
+              {o.points_earned > 0 && (
+                <p className="text-right text-xs text-muted-foreground">{qty(o.points_earned)} loyalty points earned</p>
+              )}
             </CardContent>
           </Card>
 
@@ -255,6 +263,38 @@ export default function SalesOrderPage() {
               </CardContent>
             </Card>
           </div>
+          {o.returns.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Returns</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y text-sm">
+                  {o.returns.map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-start justify-between gap-2 py-2">
+                      <div className="min-w-0">
+                        <div className="flex gap-2">
+                          <span className="font-mono text-xs">{r.number}</span>
+                          <span className="text-muted-foreground">{dateLabel(r.return_date)}</span>
+                        </div>
+                        <p className="text-muted-foreground">
+                          {r.lines.map((l) => `${qty(l.qty)} × ${l.product.name}`).join(", ")}
+                          {r.reason && ` · ${r.reason}`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium tabular-nums">−{money(r.total)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          refunded by {r.refunds.map((f) => f.method.replace("_", " ")).join(" + ")}
+                          {r.points_reversed > 0 && ` · ${qty(r.points_reversed)} points taken back`}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
         </div>
         <ActivityTimeline items={o.activity} />
       </div>

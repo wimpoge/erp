@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from ..models import Invoice, Payment, PurchaseOrderLine, SalesOrderLine, User
 from .common import DomainError, at_noon, log, next_number, rupiah, stamp
 
-PAYMENT_METHODS = ("bank_transfer", "cash", "card", "qris")
+# points: loyalty points spent at a POS till, at their rupiah value.
+PAYMENT_METHODS = ("bank_transfer", "cash", "card", "qris", "points")
 
 
 def display_status(invoice: Invoice, on: date) -> str:

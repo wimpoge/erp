@@ -116,8 +116,95 @@ def test_order_import_is_idempotent(app, admin):
     assert pos.post("/api/integration/v1/sales-orders", json=body).status_code == 422
 
 
+def till_sale(pos, external_id: str, customer: dict, warehouse: dict, product: dict, qty: int, payments: list[dict],
+              **line) -> object:
+    return pos.post("/api/integration/v1/sales-orders", json={
+        "external_id": external_id, "customer_id": customer["id"], "warehouse_id": warehouse["id"],
+        "reference": external_id, "lines": [{"product_id": product["id"], "qty": qty, **line}], "payments": payments})
+
+
+def test_paid_till_sale_ships_invoices_and_settles(app, admin):
+    receive_all(admin, buy(admin, {1: (10, 600_000)}))
+    pos = integration_client(admin, app)
+    settings = ok(pos.get("/api/integration/v1/settings"))
+    assert settings["tax_rate"] == 11 and settings["currency"] == "IDR" and "paid_sales" in settings["features"]
+    warehouse = ok(pos.get("/api/integration/v1/warehouses"))["items"][0]
+    product = next(p for p in ok(pos.get("/api/integration/v1/products"))["items"] if p["sku"] == "PH-1")
+    assert product["category"] == "Smartphone"
+    reseller = next(c for c in ok(pos.get("/api/integration/v1/customers"))["items"] if c["code"] == "C2")
+    assert reseller["discount_pct"] == 10 and reseller["group"] == "Reseller"
+
+    # 6 x 1,000,000 less the reseller's 10% = 5,400,000 + 11% tax = 5,994,000: past the 5,000,000 credit
+    # limit, but paid in full on the spot, so no credit is extended and it goes through.
+    payments = [{"method": "cash", "amount": 994_000}, {"method": "card", "amount": 5_000_000, "reference": "APPR-1"}]
+    sale = ok(till_sale(pos, "pos-1", reseller, warehouse, product, 6, payments), 201)
+    assert sale["total"] == 5_994_000 and sale["status"] == "delivered" and sale["invoice_status"] == "paid"
+    assert ok(till_sale(pos, "pos-1", reseller, warehouse, product, 6, payments))["number"] == sale["number"]
+    stock = ok(pos.get(f"/api/integration/v1/warehouses/{warehouse['id']}/stock"))["items"]
+    assert stock == [{"product_id": product["id"], "on_hand": 4}]
+    invoice = ok(admin.get("/api/invoices", params={"q": sale["invoice_number"]}))["items"][0]
+    assert invoice["total"] == invoice["amount_paid"] == 5_994_000
+
+    # A line's own discount replaces the group's.
+    full_price = ok(till_sale(pos, "pos-2", reseller, warehouse, product, 1, [{"method": "qris", "amount": 1_110_000}],
+                              discount_pct=0), 201)
+    assert full_price["total"] == 1_110_000
+
+
+def test_refused_till_sale_leaves_nothing_behind(app, admin):
+    receive_all(admin, buy(admin, {1: (2, 600_000)}))
+    pos = integration_client(admin, app)
+    warehouse = ok(pos.get("/api/integration/v1/warehouses"))["items"][0]
+    product = next(p for p in ok(pos.get("/api/integration/v1/products"))["items"] if p["sku"] == "PH-1")
+    walk_in = next(c for c in ok(pos.get("/api/integration/v1/customers"))["items"] if c["code"] == "C1")
+
+    short = till_sale(pos, "pos-1", walk_in, warehouse, product, 1, [{"method": "cash", "amount": 1}])
+    assert short.status_code == 422 and "add up to" in short.json()["detail"]
+    too_many = till_sale(pos, "pos-2", walk_in, warehouse, product, 3, [{"method": "cash", "amount": 3_330_000}])
+    assert too_many.status_code == 409 and "Not enough" in too_many.json()["detail"]
+    bad_method = till_sale(pos, "pos-3", walk_in, warehouse, product, 1, [{"method": "barter", "amount": 1_110_000}])
+    assert bad_method.status_code == 422
+    assert ok(pos.get("/api/integration/v1/sales-orders"))["total"] == 0
+
+    # The refused attempts did not use up order numbers, and a retry with the same id now works.
+    sale = ok(till_sale(pos, "pos-2", walk_in, warehouse, product, 2, [{"method": "cash", "amount": 2_220_000}]), 201)
+    assert sale["number"].endswith("-00001") and sale["invoice_status"] == "paid"
+
+
+def test_till_creates_customers(app, admin):
+    pos = integration_client(admin, app)
+    created = ok(pos.post("/api/integration/v1/customers", json={"name": " Siti ", "phone": "0812"}), 201)
+    assert created["name"] == "Siti" and created["discount_pct"] == 0 and len(created["id"]) == 36
+    assert created["id"] in {c["id"] for c in ok(pos.get("/api/integration/v1/customers"))["items"]}
+    assert pos.post("/api/integration/v1/customers", json={"name": "X", "email": "not-an-email"}).status_code == 422
+
+
 def test_revoked_client_loses_access(app, admin):
     pos = integration_client(admin, app)
     client_row = ok(admin.get("/api/settings/api-clients"))[0]
     ok(admin.patch(f"/api/settings/api-clients/{client_row['id']}", json={"active": False}))
     assert pos.get("/api/integration/v1/products").status_code == 401
+
+
+def test_cashiers_log_in_at_the_pos_not_the_erp(app, admin):
+    erp_login = TestClient(app).post("/api/auth/login", json={"username": "cashier", "password": PASSWORD})
+    assert erp_login.status_code == 403 and "Log in at the POS" in erp_login.json()["detail"]
+    assert "pos.sell" not in ok(admin.get("/api/auth/me"))["permissions"]  # office roles don't sell
+
+    pos = integration_client(admin, app)
+    assert "cashier_login" in ok(pos.get("/api/integration/v1/settings"))["features"]
+    cashier = ok(pos.post("/api/integration/v1/cashiers/login", json={"username": "Cashier ", "password": PASSWORD}))
+    assert cashier == {"username": "cashier", "full_name": "Cashier", "email": "cashier@test.dev"}
+    assert pos.post("/api/integration/v1/cashiers/login",
+                    json={"username": "sales", "password": PASSWORD}).status_code == 403
+    for _ in range(5):
+        wrong = pos.post("/api/integration/v1/cashiers/login", json={"username": "cashier", "password": "nope"})
+    assert wrong.status_code == 401
+    assert pos.post("/api/integration/v1/cashiers/login",
+                    json={"username": "cashier", "password": PASSWORD}).status_code == 423  # same lockout
+
+    me = next(u for u in ok(admin.get("/api/settings/users")) if u["username"] == "cashier")
+    ok(admin.patch(f"/api/settings/users/{me['id']}", json={"active": False}))
+    assert pos.post("/api/integration/v1/cashiers/login",
+                    json={"username": "cashier", "password": PASSWORD}).status_code == 401
+    assert "cashier" in {r["name"] for r in ok(admin.get("/api/settings/roles"))}

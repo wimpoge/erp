@@ -68,6 +68,10 @@ const STATUS: Record<string, { label: string; tone: Tone }> = {
   billed: { label: "Billed", tone: "success" },
   active: { label: "Active", tone: "success" },
   inactive: { label: "Inactive", tone: "muted" },
+  // promotions
+  running: { label: "Running", tone: "success" },
+  scheduled: { label: "Scheduled", tone: "info" },
+  ended: { label: "Ended", tone: "muted" },
 };
 
 const TONE: Record<Tone, string> = {

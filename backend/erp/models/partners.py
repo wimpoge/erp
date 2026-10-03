@@ -28,6 +28,8 @@ class Customer(PublicIdMixin, TimestampMixin, Base):
     credit_limit: Mapped[int] = mapped_column(default=0)
     payment_terms_days: Mapped[int] = mapped_column(default=30)
     active: Mapped[bool] = mapped_column(default=True)
+    # Earned on till sales, spent at a till (Settings: loyalty_earn_per, loyalty_point_value).
+    loyalty_points: Mapped[int] = mapped_column(default=0, server_default="0")
 
     group: Mapped[CustomerGroup | None] = relationship()
 

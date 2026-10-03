@@ -17,6 +17,8 @@ from ..models import (
     Product,
     PurchaseOrder,
     SalesOrder,
+    SalesReturn,
+    SalesReturnLine,
     StockLevel,
     Warehouse,
 )
@@ -34,19 +36,30 @@ def _month_key(d: date) -> str:
 
 
 def _invoiced(db: Session, kind: str, start: date, end: date | None = None) -> int:
+    """Invoiced before tax; for customers, less what came back as returns."""
     stmt = select(func.coalesce(func.sum(Invoice.subtotal), 0)).where(
         Invoice.kind == kind, Invoice.status != "cancelled", Invoice.issue_date >= start)
     if end:
         stmt = stmt.where(Invoice.issue_date < end)
-    return db.scalar(stmt)
+    amount = db.scalar(stmt)
+    if kind == "customer":
+        returned = select(func.coalesce(func.sum(SalesReturn.subtotal), 0)).where(SalesReturn.return_date >= start)
+        if end:
+            returned = returned.where(SalesReturn.return_date < end)
+        amount -= db.scalar(returned)
+    return amount
 
 
 def _cogs(db: Session, start: date, end: date | None = None) -> int:
+    """Cost of goods shipped, less the cost of goods that came back."""
     stmt = select(func.coalesce(func.sum(DeliveryLine.qty * DeliveryLine.unit_cost), 0)).join(Delivery).where(
         Delivery.delivery_date >= start)
+    returned = (select(func.coalesce(func.sum(SalesReturnLine.qty * SalesReturnLine.unit_cost), 0))
+                .join(SalesReturn).where(SalesReturn.return_date >= start))
     if end:
         stmt = stmt.where(Delivery.delivery_date < end)
-    return db.scalar(stmt)
+        returned = returned.where(SalesReturn.return_date < end)
+    return db.scalar(stmt) - db.scalar(returned)
 
 
 def _open_balance(db: Session, kind: str, overdue_before: date | None = None) -> tuple[int, int]:
@@ -119,6 +132,13 @@ def monthly(db: Session, on: date, months: int) -> list[dict]:
         .where(Delivery.delivery_date >= start)
     ):
         buckets[_month_key(d)]["cogs"] += amount
+    for d, amount in db.execute(select(SalesReturn.return_date, SalesReturn.subtotal).where(SalesReturn.return_date >= start)):
+        buckets[_month_key(d)]["revenue"] -= amount
+    for d, amount in db.execute(
+        select(SalesReturn.return_date, SalesReturnLine.qty * SalesReturnLine.unit_cost).join(SalesReturn)
+        .where(SalesReturn.return_date >= start)
+    ):
+        buckets[_month_key(d)]["cogs"] -= amount
     return [{"month": k, **v, "gross_profit": v["revenue"] - v["cogs"]} for k, v in buckets.items()]
 
 

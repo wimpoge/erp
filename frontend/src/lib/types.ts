@@ -85,6 +85,8 @@ export type Customer = {
   group: { id: number; name: string; discount_pct: number } | null;
   balance: number;
   overdue: number;
+  /** Earned and spent at the POS tills. */
+  loyalty_points: number;
 };
 export type CustomerDetail = Customer & {
   credit_used: number;
@@ -94,7 +96,7 @@ export type CustomerDetail = Customer & {
   activity: Activity[];
 };
 
-export type Supplier = Omit<Customer, "group" | "credit_limit">;
+export type Supplier = Omit<Customer, "group" | "credit_limit" | "loyalty_points">;
 export type SupplierDetail = Supplier & {
   lifetime_spend: number;
   recent_orders: (DocSummary & { order_date: string })[];
@@ -138,11 +140,46 @@ export type SalesOrderDetail = SalesOrder & {
     discount_pct: number;
     qty_delivered: number;
     qty_invoiced: number;
+    qty_returned: number;
     stock: { on_hand: number; available: number } | null;
   })[];
   deliveries: (Shipment & { delivery_date: string })[];
   invoices: InvoiceSummary[];
+  returns: SalesReturn[];
+  points_earned: number;
   activity: Activity[];
+};
+export type SalesReturn = {
+  id: number;
+  number: string;
+  return_date: string;
+  reason: string | null;
+  subtotal: number;
+  tax: number;
+  total: number;
+  units: number;
+  points_reversed: number;
+  refunds: { method: string; amount: number; reference: string | null }[];
+  lines: { product: ProductRef; qty: number; line_total: number }[];
+};
+
+export type PromotionKind = "percent" | "price" | "buy_get" | "voucher";
+export type Promotion = {
+  id: number;
+  name: string;
+  kind: PromotionKind;
+  value: number;
+  buy_qty: number;
+  get_qty: number;
+  code: string | null;
+  min_spend: number;
+  starts_on: string | null;
+  ends_on: string | null;
+  active: boolean;
+  status: "running" | "scheduled" | "ended" | "inactive";
+  product: ProductRef | null;
+  category: { id: number; name: string } | null;
+  warehouse: CodeRef | null;
 };
 
 export type PurchaseOrder = {

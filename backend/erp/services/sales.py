@@ -1,4 +1,5 @@
-"""Sales orders: draft -> confirmed (credit check) -> (partially_)delivered, then invoiced."""
+"""Sales orders: draft -> confirmed (credit check) -> (partially_)delivered, then invoiced.
+Goods delivered can come back as a sales return, refunded on the spot."""
 
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -15,12 +16,15 @@ from ..models import (
     Product,
     SalesOrder,
     SalesOrderLine,
+    SalesReturn,
+    SalesReturnLine,
     User,
     Warehouse,
     utcnow,
 )
 from .common import DomainError, at_noon, get_setting, line_amount, log, next_number, rupiah, stamp, tax_amount
-from .inventory import OPEN_SALES, Ref, post_move
+from .finance import PAYMENT_METHODS
+from .inventory import OPEN_SALES, Ref, apply_receipt_cost, post_move
 
 
 @dataclass
@@ -119,11 +123,12 @@ def credit_exposure(db: Session, customer_id: int, exclude_order_id: int | None 
     return open_invoices + uninvoiced
 
 
-def confirm(db: Session, user: User | None, order: SalesOrder) -> SalesOrder:
+def confirm(db: Session, user: User | None, order: SalesOrder, check_credit: bool = True) -> SalesOrder:
+    """`check_credit=False` for a sale paid in full on the spot (a POS till): it adds nothing to what is owed."""
     if order.status != "draft":
         raise DomainError(409, f"{order.number} is already {order.status}.")
     customer = order.customer
-    if customer.credit_limit > 0:
+    if check_credit and customer.credit_limit > 0:
         exposure = credit_exposure(db, customer.id, exclude_order_id=order.id)
         if exposure + order.total > customer.credit_limit:
             raise DomainError(
@@ -210,3 +215,105 @@ def invoice_status(order: SalesOrder) -> str:
     if invoiced == 0:
         return "not_invoiced"
     return "invoiced" if all(li.qty_invoiced == li.qty for li in order.lines) else "partially_invoiced"
+
+
+# ---------------------------------------------------------------- returns
+
+
+@dataclass
+class ReturnLineIn:
+    order_line_id: int
+    qty: int
+
+
+@dataclass
+class RefundIn:
+    method: str
+    amount: int
+    reference: str | None = None
+
+
+def return_totals(order: SalesOrder, subtotal: int, closes_order: bool) -> tuple[int, int, int]:
+    """(subtotal, tax, total) of a return. The return that takes back the last unit gives back
+    exactly what is left of the order, so rounding line by line never refunds more than was paid."""
+    if closes_order:
+        subtotal = order.subtotal - sum(r.subtotal for r in order.returns)
+        tax = order.tax - sum(r.tax for r in order.returns)
+    else:
+        tax = tax_amount(subtotal, order.tax_rate)
+    return subtotal, tax, subtotal + tax
+
+
+def _shipped_cost(db: Session, line: SalesOrderLine) -> int:
+    """Average cost the line's units left the warehouse at."""
+    qty, cost = db.execute(select(func.coalesce(func.sum(DeliveryLine.qty), 0),
+                                  func.coalesce(func.sum(DeliveryLine.qty * DeliveryLine.unit_cost), 0))
+                           .where(DeliveryLine.order_line_id == line.id)).one()
+    return cost // qty if qty else line.product.avg_cost
+
+
+def return_goods(db: Session, user: User | None, order: SalesOrder, lines: list[ReturnLineIn], on: date,
+                 refunds: list[RefundIn], reason: str | None = None, external_id: str | None = None,
+                 point_value: int = 0) -> SalesReturn:
+    """Take delivered goods back into the order's warehouse and refund them. The refunds must add
+    up to the return's total; loyalty points earned on the order shrink in proportion."""
+    if order.status not in ("partially_delivered", "delivered"):
+        raise DomainError(409, f"{order.number} is {order.status}; only delivered goods can come back.")
+    by_id = {li.id: li for li in order.lines}
+    qty_by_line: dict[int, int] = {}
+    for li in lines:
+        if li.order_line_id not in by_id:
+            raise DomainError(422, f"Line {li.order_line_id} is not on {order.number}.")
+        qty_by_line[li.order_line_id] = qty_by_line.get(li.order_line_id, 0) + li.qty
+    if not qty_by_line:
+        raise DomainError(422, "Return at least one item.")
+    for lid, qty in qty_by_line.items():
+        line = by_id[lid]
+        returnable = line.qty_delivered - line.qty_returned
+        if qty <= 0 or qty > returnable:
+            raise DomainError(422, f"{line.product.name}: return between 1 and {returnable}.")
+
+    ret = SalesReturn(number=next_number(db, "SR", on), order_id=order.id, warehouse_id=order.warehouse_id,
+                      return_date=on, reason=(reason or "").strip() or None, tax_rate=order.tax_rate,
+                      subtotal=0, tax=0, total=0, external_id=external_id, created_at=stamp(on),
+                      created_by_id=user.id if user else None)
+    for lid, qty in qty_by_line.items():
+        line = by_id[lid]
+        ret.lines.append(SalesReturnLine(order_line_id=lid, product_id=line.product_id, qty=qty,
+                                         unit_price=line.unit_price, discount_pct=line.discount_pct,
+                                         line_total=line_amount(qty, line.unit_price, line.discount_pct),
+                                         unit_cost=_shipped_cost(db, line)))
+    closes = all(li.qty_delivered == li.qty and li.qty_returned + qty_by_line.get(li.id, 0) == li.qty
+                 for li in order.lines)
+    ret.subtotal, ret.tax, ret.total = return_totals(order, sum(li.line_total for li in ret.lines), closes)
+
+    refunded = sum(r.amount for r in refunds)
+    if refunded != ret.total:
+        raise DomainError(422, f"Refunds add up to {rupiah(refunded)}, the return is {rupiah(ret.total)}.")
+    customer = order.customer
+    for r in refunds:
+        if r.method not in PAYMENT_METHODS or r.amount <= 0:
+            raise DomainError(422, f"Refund method must be one of: {', '.join(PAYMENT_METHODS)}, amount above zero.")
+        if r.method == "points":
+            if point_value <= 0 or r.amount % point_value:
+                raise DomainError(422, "A points refund must be a whole number of points.")
+            customer.loyalty_points += r.amount // point_value
+    ret.refunds = [{"method": r.method, "amount": r.amount, "reference": r.reference} for r in refunds]
+    if order.points_earned and order.subtotal:
+        earned_back = order.points_earned * ret.subtotal // order.subtotal
+        ret.points_reversed = min(earned_back, customer.loyalty_points)
+        customer.loyalty_points -= ret.points_reversed
+
+    db.add(ret)
+    db.flush()
+    ref = Ref("sales_return", ret.id, ret.number)
+    for li in ret.lines:
+        line = by_id[li.order_line_id]
+        apply_receipt_cost(db, line.product, li.qty, li.unit_cost)
+        post_move(db, product=line.product, warehouse=order.warehouse, qty=li.qty, kind="return",
+                  unit_cost=li.unit_cost, ref=ref, user=user, at=at_noon(on))
+        line.qty_returned += li.qty
+    log(db, user, "sales_order", order.id, "returned",
+        f"{order.number}: {ret.number}, {sum(li.qty for li in ret.lines)} unit(s) back into {order.warehouse.name}, "
+        f"{rupiah(ret.total)} refunded" + (f" ({ret.reason})" if ret.reason else ""), at=at_noon(on))
+    return ret

@@ -20,6 +20,8 @@ export type Company = {
   bank_holder: string;
   tax_rate: number;
   currency: string;
+  loyalty_earn_per: number;
+  loyalty_point_value: number;
 };
 
 export function useCompany() {

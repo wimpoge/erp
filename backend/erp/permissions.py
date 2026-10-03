@@ -14,9 +14,12 @@ PERMISSIONS = {
     "finance.write": "Create invoices and bills, register payments",
     "reports.read": "See the dashboard and reports",
     "settings.manage": "Manage users, API clients and company settings",
+    "pos.sell": "Sell at the POS tills (logs in at the POS, not here)",
+    "pos.approve": "Approve big discounts, voids, refunds and large cash-outs at a POS till",
 }
 
-_ALL = set(PERMISSIONS)
+# Office roles work in the ERP; selling at a till is the cashier's job alone.
+_ALL = set(PERMISSIONS) - {"pos.sell"}
 
 ROLES: dict[str, dict] = {
     "admin": {"label": "Administrator", "permissions": _ALL},
@@ -39,7 +42,13 @@ ROLES: dict[str, dict] = {
         "permissions": {"catalog.read", "sales.read", "purchasing.read", "finance.read", "finance.write",
                         "reports.read"},
     },
+    "cashier": {"label": "Cashier", "permissions": {"pos.sell"}},
 }
+
+
+def is_pos_only(role: str) -> bool:
+    """A till account: it has no ERP screens, so it logs in at the POS instead."""
+    return permissions_for(role) == {"pos.sell"}
 
 
 def permissions_for(role: str) -> set[str]:

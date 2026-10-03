@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
-from ..models import Customer, Delivery, DeliveryLine, Invoice, SalesOrder, SalesOrderLine, today
+from ..models import Customer, Delivery, DeliveryLine, Invoice, SalesOrder, SalesOrderLine, SalesReturn, today
 from ..services import sales as svc
 from ..services.common import get_or_404
 from ..services.inventory import availability
@@ -67,7 +67,7 @@ def order_out(o: SalesOrder, detail: bool = False, db=None) -> dict:
             "lines": [{"id": li.id, "product": product_ref(li.product), "qty": li.qty, "unit_price": li.unit_price,
                        "discount_pct": li.discount_pct, "line_total": li.line_total,
                        "qty_delivered": li.qty_delivered, "qty_invoiced": li.qty_invoiced,
-                       "stock": stock.get(li.id)} for li in o.lines],
+                       "qty_returned": li.qty_returned, "stock": stock.get(li.id)} for li in o.lines],
             "deliveries": [{"id": d.id, "number": d.number, "delivery_date": d.delivery_date,
                             "units": sum(li.qty for li in d.lines), "created_by": user_ref(d.created_by),
                             "lines": [{"product": product_ref(li.product), "qty": li.qty} for li in d.lines]}
@@ -75,6 +75,13 @@ def order_out(o: SalesOrder, detail: bool = False, db=None) -> dict:
             "invoices": [{"id": i.id, "number": i.number, "issue_date": i.issue_date, "due_date": i.due_date,
                           "status": i.status, "total": i.total, "balance": i.balance}
                          for i in db.scalars(select(Invoice).filter_by(sales_order_id=o.id).order_by(Invoice.id))],
+            "returns": [{"id": r.id, "number": r.number, "return_date": r.return_date, "reason": r.reason,
+                         "subtotal": r.subtotal, "tax": r.tax, "total": r.total, "refunds": r.refunds,
+                         "units": sum(li.qty for li in r.lines), "points_reversed": r.points_reversed,
+                         "lines": [{"product": product_ref(li.product), "qty": li.qty, "line_total": li.line_total}
+                                   for li in r.lines]}
+                        for r in db.scalars(select(SalesReturn).filter_by(order_id=o.id).order_by(SalesReturn.id))],
+            "points_earned": o.points_earned,
             "activity": timeline(db, "sales_order", o.id),
         })
     return out

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
-from .api import auth, catalog, finance, integration, inventory, partners, purchasing, reports, sales
+from .api import auth, catalog, finance, integration, inventory, partners, promotions, purchasing, reports, sales
 from .api import settings as settings_api
 from .config import Settings, get_settings
 from .db import make_session_factory
@@ -33,6 +33,7 @@ def create_app(session_factory: sessionmaker | None = None, settings: Settings |
     def health() -> dict:
         return {"status": "ok"}
 
-    for module in (auth, catalog, partners, inventory, purchasing, sales, finance, reports, settings_api, integration):
+    for module in (auth, catalog, partners, inventory, purchasing, sales, promotions, finance, reports, settings_api,
+                   integration):
         app.include_router(module.router)
     return app

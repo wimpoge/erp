@@ -157,7 +157,7 @@ def _merge(lines: list[QtyLine]) -> list[QtyLine]:
     return [QtyLine(p, q) for p, q in merged.items()]
 
 
-def create_transfer(db: Session, user: User, from_id: int, to_id: int, on: date, lines: list[QtyLine],
+def create_transfer(db: Session, user: User | None, from_id: int, to_id: int, on: date, lines: list[QtyLine],
                     note: str | None = None) -> Transfer:
     if from_id == to_id:
         raise DomainError(422, "Source and destination must be different warehouses.")
@@ -169,7 +169,7 @@ def create_transfer(db: Session, user: User, from_id: int, to_id: int, on: date,
     lines = _merge(lines)
     _products(db, [li.product_id for li in lines])
     transfer = Transfer(number=next_number(db, "TR", on), from_warehouse_id=from_id, to_warehouse_id=to_id,
-                        transfer_date=on, created_at=stamp(on), note=note, created_by_id=user.id,
+                        transfer_date=on, created_at=stamp(on), note=note, created_by_id=user.id if user else None,
                         lines=[TransferLine(product_id=li.product_id, qty=li.qty) for li in lines])
     db.add(transfer)
     db.flush()

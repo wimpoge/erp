@@ -101,6 +101,29 @@ function CompanyForm({ company }: { company: Company }) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Loyalty points</CardTitle>
+          <CardDescription>Customers named at a POS till earn points on what they pay, and can spend them there.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="c-earn">One point per (Rp)</FieldLabel>
+              <Input id="c-earn" type="number" min={0} step={1000} value={form.loyalty_earn_per}
+                onChange={(e) => setForm({ ...form, loyalty_earn_per: Number(e.target.value) })} />
+              <FieldDescription>0 switches earning off.</FieldDescription>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="c-point">A point is worth (Rp)</FieldLabel>
+              <Input id="c-point" type="number" min={1} value={form.loyalty_point_value}
+                onChange={(e) => setForm({ ...form, loyalty_point_value: Number(e.target.value) })} />
+              <FieldDescription>When it is spent at a till.</FieldDescription>
+            </Field>
+          </FieldGroup>
+        </CardContent>
+      </Card>
+
       <Button type="submit" className="w-fit" disabled={save.isPending}>
         {save.isPending && <Spinner />} Save
       </Button>

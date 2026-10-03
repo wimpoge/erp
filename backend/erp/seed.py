@@ -18,6 +18,7 @@ from .models import (
     CustomerGroup,
     Invoice,
     Product,
+    Promotion,
     PurchaseOrder,
     SalesOrder,
     StockLevel,
@@ -39,6 +40,7 @@ DEMO_USERS = [
     ("purchasing", "Sari Utami", "purchasing"),
     ("warehouse", "Budi Santoso", "warehouse"),
     ("finance", "Rina Kurniawati", "accountant"),
+    ("cashier", "Putri Ayu", "cashier"),  # logs in at the POS
 ]
 
 WAREHOUSES = [
@@ -179,6 +181,7 @@ def seed(db: Session, *, months: int = 12, seed_value: int = 7) -> dict:
         db.commit()
         day += timedelta(days=1)
     _work_in_progress(w)
+    _promotions(w)
     db.commit()
     return {"users": [u[0] for u in DEMO_USERS], "password": DEMO_PASSWORD}
 
@@ -365,3 +368,21 @@ def _work_in_progress(w: World) -> None:
                                         [inventory.CountLine(p.id, max(0, _on_hand(w, p.id, w.warehouses[1].id) - 1))
                                          for p in rng.sample(w.products, 4)])
     assert count.status == "draft"
+
+
+def _promotions(w: World) -> None:
+    """A few promotions running at the tills: one of each kind."""
+    by_category: dict[str, list[Product]] = {}
+    for p in w.products:
+        by_category.setdefault(p.category.name, []).append(p)
+    first_category = next(iter(by_category))
+    special = w.rng.choice(w.products)
+    free = min(w.products, key=lambda p: p.sale_price)
+    w.db.add_all([
+        Promotion(name=f"{special.name} special", kind="price", product=special,
+                  value=_round_price(special.sale_price * 0.9)),
+        Promotion(name=f"{first_category} week", kind="percent", category=by_category[first_category][0].category,
+                  value=10, ends_on=today() + timedelta(days=7)),
+        Promotion(name="Buy 2 get 1 free", kind="buy_get", product=free, buy_qty=2, get_qty=1),
+        Promotion(name="Payday voucher", kind="voucher", code="PAYDAY", value=5, min_spend=1_000_000),
+    ])

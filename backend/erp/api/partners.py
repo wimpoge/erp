@@ -88,7 +88,7 @@ def customer_row(c: Customer, balance: tuple[int, int] = (0, 0)) -> dict:
         "id": c.id, "code": c.code, "name": c.name, "email": c.email, "phone": c.phone, "address": c.address,
         "city": c.city, "active": c.active, "credit_limit": c.credit_limit, "payment_terms_days": c.payment_terms_days,
         "group": {"id": c.group.id, "name": c.group.name, "discount_pct": c.group.discount_pct} if c.group else None,
-        "balance": balance[0], "overdue": balance[1],
+        "balance": balance[0], "overdue": balance[1], "loyalty_points": c.loyalty_points,
     }
 
 

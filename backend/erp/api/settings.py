@@ -15,7 +15,7 @@ from .deps import Db, can
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-RoleName = Literal["admin", "manager", "sales", "purchasing", "warehouse", "accountant"]
+RoleName = Literal["admin", "manager", "sales", "purchasing", "warehouse", "accountant", "cashier"]
 
 
 @router.get("/roles")
@@ -94,6 +94,9 @@ class CompanyIn(BaseModel):
     bank_account: str = Field("", max_length=40)
     bank_holder: str = Field("", max_length=120)
     tax_rate: int = Field(ge=0, le=50)
+    # POS loyalty: rupiah spent per point earned (0: no points), and a point's value when spent.
+    loyalty_earn_per: int = Field(10_000, ge=0)
+    loyalty_point_value: int = Field(100, ge=1)
 
 
 @router.get("/company")

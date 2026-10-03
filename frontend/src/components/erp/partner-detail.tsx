@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCan } from "@/lib/auth";
-import { dateLabel, money } from "@/lib/format";
+import { dateLabel, money, qty } from "@/lib/format";
 import type { CustomerDetail, SupplierDetail } from "@/lib/types";
 
 /** Shared detail page for a customer or a supplier. */
@@ -78,7 +78,13 @@ export function PartnerDetail({ kind, partner }: { kind: "customer" | "supplier"
           value={money(customer ? customer.lifetime_revenue : supplier!.lifetime_spend)}
           hint="Excluding VAT"
         />
-        {customer && <StatCard label="Payment terms" value={`${partner.payment_terms_days} days`} />}
+        {customer && (
+          <StatCard
+            label="Loyalty points"
+            value={qty(customer.loyalty_points)}
+            hint={`Earned at the POS tills · pays in ${partner.payment_terms_days} days`}
+          />
+        )}
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_340px]">

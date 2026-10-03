@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from ..models import User
-from ..permissions import ROLES, permissions_for
+from ..permissions import ROLES, is_pos_only, permissions_for
 from ..services import auth as auth_service
 from ..services.common import all_settings
 from .deps import SESSION_COOKIE, CurrentUser, Db
@@ -28,6 +28,8 @@ def me_out(user: User, db) -> dict:
 def login(body: LoginIn, request: Request, response: Response, db: Db) -> dict:
     settings = request.app.state.settings
     user = auth_service.authenticate(db, body.username, body.password)
+    if is_pos_only(user.role):
+        raise HTTPException(403, "This is a cashier account. Log in at the POS.")
     token = auth_service.start_session(db, user, settings.session_hours)
     db.commit()
     response.set_cookie(SESSION_COOKIE, token, max_age=settings.session_hours * 3600, httponly=True,
