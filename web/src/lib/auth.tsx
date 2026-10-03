@@ -7,6 +7,7 @@ import { api } from "./api";
 
 export type Me = {
   id: number;
+  username: string;
   email: string;
   full_name: string;
   role: string;

@@ -7,7 +7,7 @@ const sans = Geist({ variable: "--font-sans", subsets: ["latin"] });
 const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: { default: "Nusantara ERP", template: "%s · Nusantara ERP" },
+  title: { default: "ERP", template: "%s · ERP" },
   description: "Inventory, purchasing, sales, finance and reporting for a multi-warehouse retailer.",
 };
 

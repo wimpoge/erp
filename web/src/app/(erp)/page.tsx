@@ -54,7 +54,7 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader
-        title={`Good ${greeting()}, ${me.full_name.split(" ")[0]}`}
+        title={`Good ${greeting()}, ${me.username}`}
         description="How the business is doing over the last 30 days."
         actions={
           <>

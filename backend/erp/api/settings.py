@@ -26,12 +26,13 @@ def list_roles(_: can("settings.manage")) -> list[dict]:
 
 
 def user_out(u: User) -> dict:
-    return {"id": u.id, "email": u.email, "full_name": u.full_name, "role": u.role,
+    return {"id": u.id, "username": u.username, "email": u.email, "full_name": u.full_name, "role": u.role,
             "role_label": ROLES.get(u.role, {}).get("label", u.role), "active": u.active,
             "locked": bool(u.locked_until and u.locked_until > utcnow()), "last_login_at": u.last_login_at}
 
 
 class UserIn(BaseModel):
+    username: str = Field(min_length=3, max_length=40, pattern=r"^[a-zA-Z0-9._-]+$")
     email: EmailStr
     full_name: str = Field(min_length=1, max_length=120)
     role: RoleName
@@ -53,10 +54,10 @@ def list_users(db: Db, _: can("settings.manage")) -> list[dict]:
 
 @router.post("/users", status_code=201)
 def create_user(body: UserIn, db: Db, _: can("settings.manage")) -> dict:
-    email = body.email.lower()
-    if db.scalar(select(User).filter_by(email=email)):
-        raise DomainError(409, "A user with that email already exists.")
-    user = User(email=email, full_name=body.full_name.strip(), role=body.role,
+    email, username = body.email.lower(), body.username.lower()
+    if db.scalar(select(User).where((User.email == email) | (User.username == username))):
+        raise DomainError(409, "That username or email is already used.")
+    user = User(username=username, email=email, full_name=body.full_name.strip(), role=body.role,
                 password_hash=hash_password(body.password))
     db.add(user)
     db.commit()

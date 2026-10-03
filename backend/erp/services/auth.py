@@ -33,7 +33,7 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(candidate.hex(), digest)
 
 
-# Checked when the email is unknown, so a wrong email takes as long as a wrong password.
+# Checked when the username is unknown, so a wrong username takes as long as a wrong password.
 _DUMMY_HASH = hash_password(secrets.token_hex(8))
 
 
@@ -41,11 +41,13 @@ def sha256(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def authenticate(db: Session, email: str, password: str) -> User:
-    user = db.scalar(select(User).filter_by(email=email.strip().lower()))
+def authenticate(db: Session, login: str, password: str) -> User:
+    """Log in with a username (or, as a fallback, the email address)."""
+    login = login.strip().lower()
+    user = db.scalar(select(User).where((User.username == login) | (User.email == login)))
     if user is None or not user.active:
         verify_password(password, _DUMMY_HASH)
-        raise DomainError(401, "Wrong email or password.")
+        raise DomainError(401, "Wrong username or password.")
     now = utcnow()
     if user.locked_until and user.locked_until > now:
         minutes = int((user.locked_until - now).total_seconds() // 60) + 1
@@ -56,7 +58,7 @@ def authenticate(db: Session, email: str, password: str) -> User:
             user.locked_until = now + LOCKOUT
             user.failed_logins = 0
         db.commit()
-        raise DomainError(401, "Wrong email or password.")
+        raise DomainError(401, "Wrong username or password.")
     user.failed_logins = 0
     user.locked_until = None
     user.last_login_at = now

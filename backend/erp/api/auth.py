@@ -11,13 +11,13 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class LoginIn(BaseModel):
-    email: str = Field(min_length=3, max_length=120)
+    username: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=1, max_length=200)
 
 
 def me_out(user: User, db) -> dict:
     return {
-        "id": user.id, "email": user.email, "full_name": user.full_name, "role": user.role,
+        "id": user.id, "username": user.username, "email": user.email, "full_name": user.full_name, "role": user.role,
         "role_label": ROLES.get(user.role, {}).get("label", user.role),
         "permissions": sorted(permissions_for(user.role)),
         "company": {k: v for k, v in all_settings(db).items() if k in ("company_name", "currency")},
@@ -27,7 +27,7 @@ def me_out(user: User, db) -> dict:
 @router.post("/login")
 def login(body: LoginIn, request: Request, response: Response, db: Db) -> dict:
     settings = request.app.state.settings
-    user = auth_service.authenticate(db, body.email, body.password)
+    user = auth_service.authenticate(db, body.username, body.password)
     token = auth_service.start_session(db, user, settings.session_hours)
     db.commit()
     response.set_cookie(SESSION_COOKIE, token, max_age=settings.session_hours * 3600, httponly=True,

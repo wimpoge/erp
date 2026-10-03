@@ -1,4 +1,6 @@
-# Nusantara ERP
+# ERP
+
+**Live demo:** https://erp-otw7.vercel.app · **API docs:** https://erp-ruby-five.vercel.app/docs
 
 A web ERP for a multi-warehouse retailer of phones and accessories: **inventory, purchasing,
 sales, finance (receivables and payables) and reporting**, with role-based access and an
@@ -21,7 +23,8 @@ All company, people and product data is generated with Faker.
 | **Admin** | Users with six roles (admin, manager, sales, purchasing, warehouse, accountant) · API clients · company settings (VAT rate) · an audit trail on every document |
 | **Integration API** | Client-credentials tokens · paginated lists that expose only public UUIDs · sales-order import that is **idempotent** on the caller's `external_id` |
 
-Try it with the demo accounts on the login page; each role sees only what it may do.
+Try it with the demo accounts on the login page (usernames `admin`, `manager`, `sales`, `purchasing`,
+`warehouse`, `finance`; password `demo1234`); each role sees only what it may do.
 
 ## Design decisions
 
@@ -67,7 +70,7 @@ npm install
 npm run dev                                                   # http://localhost:3000
 ```
 
-Log in with a demo account (one click on the login page), password `demo1234`.
+Log in with a demo account (one click on the login page), e.g. username `admin`, password `demo1234`.
 
 ### Tests
 
@@ -93,7 +96,7 @@ Both parts run on Vercel's free Hobby plan; the database on Neon's free tier.
    ERP_DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require" ../.venv/Scripts/python -m erp.cli seed
    ```
    (`python -m erp.cli migrate` alone creates the schema without demo data;
-   `python -m erp.cli create-admin you@company.com "Your Name"` adds a real admin.)
+   `python -m erp.cli create-admin yourname you@company.com "Your Name"` adds a real admin.)
 3. **Backend.** In Vercel, *Add New → Project*, import this repository, set **Root Directory** to
    `backend` (Vercel detects FastAPI from `app.py`), and add the environment variables:
    `ERP_DATABASE_URL` (the Neon URL), `ERP_SERVERLESS=true`, `ERP_COOKIE_SECURE=true`.

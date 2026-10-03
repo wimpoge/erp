@@ -47,10 +47,10 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" render={<Link href="/" />}>
               <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
-                N
+                E
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">Nusantara ERP</span>
+                <span className="truncate font-semibold">ERP</span>
                 <span className="truncate text-xs text-muted-foreground">{me.company.company_name}</span>
               </div>
             </SidebarMenuButton>
@@ -86,12 +86,7 @@ function UserMenu() {
   const me = useMe();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const initials = me.full_name
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initials = me.username.slice(0, 2).toUpperCase();
 
   async function logout() {
     try {
@@ -111,7 +106,7 @@ function UserMenu() {
               <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{me.full_name}</span>
+              <span className="truncate font-medium">{me.username}</span>
               <span className="truncate text-xs text-muted-foreground">{me.role_label}</span>
             </div>
             <ChevronsUpDown className="ml-auto size-4" />
@@ -120,8 +115,8 @@ function UserMenu() {
             <DropdownMenuGroup>
               <DropdownMenuLabel>
                 <div className="grid text-left text-sm leading-tight">
-                  <span className="font-medium text-foreground">{me.full_name}</span>
-                  <span className="text-xs">{me.email}</span>
+                  <span className="font-medium text-foreground">{me.username}</span>
+                  <span className="text-xs">{me.role_label}</span>
                 </div>
               </DropdownMenuLabel>
             </DropdownMenuGroup>

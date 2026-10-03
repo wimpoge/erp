@@ -23,7 +23,7 @@ def db_factory(tmp_path):
     Base.metadata.create_all(engine)
     with factory() as db:
         for role in ROLES:
-            db.add(User(email=f"{role}@test.dev", full_name=role.title(), role=role,
+            db.add(User(username=role, email=f"{role}@test.dev", full_name=role.title(), role=role,
                         password_hash=hash_password(PASSWORD)))
         phones = Category(name="Smartphone")
         db.add_all([
@@ -47,7 +47,8 @@ def db_factory(tmp_path):
 
 @pytest.fixture
 def app(db_factory):
-    return create_app(db_factory, Settings(database_url="sqlite://"))
+    # _env_file=None: a local backend/.env with production settings must not leak into tests.
+    return create_app(db_factory, Settings(_env_file=None, database_url="sqlite://"))
 
 
 @pytest.fixture
@@ -56,7 +57,7 @@ def login(app):
 
     def _login(role: str) -> TestClient:
         client = TestClient(app)
-        r = client.post("/api/auth/login", json={"email": f"{role}@test.dev", "password": PASSWORD})
+        r = client.post("/api/auth/login", json={"username": role, "password": PASSWORD})
         assert r.status_code == 200, r.text
         clients.append(client)
         return client

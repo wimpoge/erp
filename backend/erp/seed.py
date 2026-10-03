@@ -31,13 +31,14 @@ from .services.auth import hash_password
 from .services.common import DomainError, set_setting
 
 DEMO_PASSWORD = "demo1234"
+# (username, full name, role) — all made up
 DEMO_USERS = [
-    ("admin@example.com", "Rafli Pratama", "admin"),
-    ("manager@example.com", "Dewi Lestari", "manager"),
-    ("sales@example.com", "Andi Wijaya", "sales"),
-    ("purchasing@example.com", "Sari Utami", "purchasing"),
-    ("warehouse@example.com", "Budi Santoso", "warehouse"),
-    ("finance@example.com", "Rina Kurniawati", "accountant"),
+    ("admin", "Admin Demo", "admin"),
+    ("manager", "Dewi Lestari", "manager"),
+    ("sales", "Andi Wijaya", "sales"),
+    ("purchasing", "Sari Utami", "purchasing"),
+    ("warehouse", "Budi Santoso", "warehouse"),
+    ("finance", "Rina Kurniawati", "accountant"),
 ]
 
 WAREHOUSES = [
@@ -106,17 +107,17 @@ def seed(db: Session, *, months: int = 12, seed_value: int = 7) -> dict:
     fake.seed_instance(seed_value)
 
     users = {}
-    for email, name, role in DEMO_USERS:
-        users[role] = User(email=email, full_name=name, role=role, password_hash=hash_password(DEMO_PASSWORD))
+    for username, name, role in DEMO_USERS:
+        users[role] = User(username=username, email=f"{username}@example.com", full_name=name, role=role, password_hash=hash_password(DEMO_PASSWORD))
         db.add(users[role])
-    set_setting(db, "company_name", "Kios Gawai Nusantara")
+    set_setting(db, "company_name", "Kios Gawai")
     set_setting(db, "company_address", "Jl. Jend. Sudirman Kav. 21, Jakarta Selatan 12920")
     set_setting(db, "company_phone", "+62 21 5550 1234")
     set_setting(db, "company_email", "finance@kiosgawai.example")
     set_setting(db, "company_tax_id", "01.234.567.8-012.000")
     set_setting(db, "bank_name", "Bank Central Asia (BCA)")
     set_setting(db, "bank_account", "123 456 7890")
-    set_setting(db, "bank_holder", "PT Kios Gawai Nusantara")
+    set_setting(db, "bank_holder", "PT Kios Gawai")
     set_setting(db, "tax_rate", 11)
 
     warehouses = [Warehouse(code=c, name=n, city=city, address=a) for c, n, city, a in WAREHOUSES]

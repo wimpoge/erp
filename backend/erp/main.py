@@ -15,7 +15,7 @@ from .services.common import DomainError
 def create_app(session_factory: sessionmaker | None = None, settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(
-        title="Nusantara ERP API",
+        title="ERP API",
         version="1.0.0",
         description="Inventory, purchasing, sales, finance and reporting. "
                     "The `/api/integration/v1` routes are for outside systems (client-credentials tokens).",

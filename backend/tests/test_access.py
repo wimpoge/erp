@@ -14,23 +14,28 @@ def test_everything_needs_a_login(app):
 
 def test_login_cookie_and_logout(app):
     client = TestClient(app)
-    r = client.post("/api/auth/login", json={"email": "Sales@Test.dev ", "password": PASSWORD})
+    r = client.post("/api/auth/login", json={"username": "Sales ", "password": PASSWORD})
     me = ok(r)
-    assert me["role"] == "sales" and "sales.write" in me["permissions"] and "settings.manage" not in me["permissions"]
+    assert me["username"] == "sales" and me["role"] == "sales" and "sales.write" in me["permissions"] and "settings.manage" not in me["permissions"]
     cookie = r.headers["set-cookie"]
     assert "erp_session=" in cookie and "HttpOnly" in cookie and "SameSite=lax" in cookie
     assert client.post("/api/auth/logout").status_code == 204
     assert client.get("/api/auth/me").status_code == 401
 
 
+def test_email_also_works_for_login(app):
+    r = TestClient(app).post("/api/auth/login", json={"username": "Sales@Test.dev", "password": PASSWORD})
+    assert r.status_code == 200 and r.json()["username"] == "sales"
+
+
 def test_wrong_password_unknown_user_and_lockout(app):
     client = TestClient(app)
-    wrong = client.post("/api/auth/login", json={"email": "sales@test.dev", "password": "nope"})
-    unknown = client.post("/api/auth/login", json={"email": "ghost@test.dev", "password": "nope"})
+    wrong = client.post("/api/auth/login", json={"username": "sales", "password": "nope"})
+    unknown = client.post("/api/auth/login", json={"username": "ghost", "password": "nope"})
     assert wrong.status_code == unknown.status_code == 401 and wrong.json() == unknown.json()
     for _ in range(4):
-        client.post("/api/auth/login", json={"email": "sales@test.dev", "password": "nope"})
-    locked = client.post("/api/auth/login", json={"email": "sales@test.dev", "password": PASSWORD})
+        client.post("/api/auth/login", json={"username": "sales", "password": "nope"})
+    locked = client.post("/api/auth/login", json={"username": "sales", "password": PASSWORD})
     assert locked.status_code == 423
 
 
@@ -53,12 +58,12 @@ def test_roles_limit_what_people_can_do(login):
 
 
 def test_admin_manages_users(admin, app):
-    new = ok(admin.post("/api/settings/users", json={"email": "budi@test.dev", "full_name": "Budi",
+    new = ok(admin.post("/api/settings/users", json={"username": "budi", "email": "budi@test.dev", "full_name": "Budi",
                                                      "role": "warehouse", "password": "longenough"}), 201)
-    assert admin.post("/api/settings/users", json={"email": "budi@test.dev", "full_name": "B", "role": "sales",
+    assert admin.post("/api/settings/users", json={"username": "budi", "email": "other@test.dev", "full_name": "B", "role": "sales",
                                                    "password": "longenough"}).status_code == 409
     ok(admin.patch(f"/api/settings/users/{new['id']}", json={"active": False}))
-    assert TestClient(app).post("/api/auth/login", json={"email": "budi@test.dev",
+    assert TestClient(app).post("/api/auth/login", json={"username": "budi",
                                                          "password": "longenough"}).status_code == 401
     me = ok(admin.get("/api/auth/me"))
     assert admin.patch(f"/api/settings/users/{me['id']}", json={"role": "sales"}).status_code == 422

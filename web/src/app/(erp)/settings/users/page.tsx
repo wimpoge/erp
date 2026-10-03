@@ -28,6 +28,7 @@ import { useAction } from "@/lib/hooks";
 
 type UserRow = {
   id: number;
+  username: string;
   email: string;
   full_name: string;
   role: string;
@@ -57,7 +58,7 @@ export default function UsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead>User</TableHead>
               <TableHead>Role</TableHead>
               <TableHead className="hidden md:table-cell">Last login</TableHead>
               <TableHead>Status</TableHead>
@@ -69,9 +70,11 @@ export default function UsersPage() {
               <TableRow key={u.id}>
                 <TableCell>
                   <p className="font-medium">
-                    {u.full_name} {u.id === me.id && <span className="text-xs font-normal text-muted-foreground">(you)</span>}
+                    {u.username} {u.id === me.id && <span className="text-xs font-normal text-muted-foreground">(you)</span>}
                   </p>
-                  <p className="text-xs text-muted-foreground">{u.email}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {u.full_name} · {u.email}
+                  </p>
                 </TableCell>
                 <TableCell><Badge variant="secondary">{u.role_label}</Badge></TableCell>
                 <TableCell className="hidden text-muted-foreground md:table-cell">{u.last_login_at ? dateTimeLabel(u.last_login_at) : "Never"}</TableCell>
@@ -149,13 +152,13 @@ function UserDialog({ state, roles, onClose }: {
   onClose: () => void;
 }) {
   const user = state && state.mode !== "new" ? state.user : null;
-  const [form, setForm] = useState({ email: "", full_name: "", role: "sales", password: "" });
+  const [form, setForm] = useState({ username: "", email: "", full_name: "", role: "sales", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [last, setLast] = useState<typeof state>(null);
   if (state !== last) {
     setLast(state);
     setError(null);
-    setForm({ email: user?.email ?? "", full_name: user?.full_name ?? "", role: user?.role ?? "sales", password: "" });
+    setForm({ username: user?.username ?? "", email: user?.email ?? "", full_name: user?.full_name ?? "", role: user?.role ?? "sales", password: "" });
   }
   const save = useAction(() => {
     if (!state || state.mode === "new") return post("/api/settings/users", form);
@@ -180,7 +183,7 @@ function UserDialog({ state, roles, onClose }: {
       <DialogContent>
         <form onSubmit={submit} className="space-y-4">
           <DialogHeader>
-            <DialogTitle>{state?.mode === "new" ? "Add user" : state?.mode === "password" ? `New password for ${user?.full_name}` : `Edit ${user?.full_name}`}</DialogTitle>
+            <DialogTitle>{state?.mode === "new" ? "Add user" : state?.mode === "password" ? `New password for ${user?.username}` : `Edit ${user?.username}`}</DialogTitle>
             {state?.mode === "password" && <DialogDescription>Their other sessions stay logged in until they expire.</DialogDescription>}
           </DialogHeader>
           <FieldGroup>
@@ -190,6 +193,14 @@ function UserDialog({ state, roles, onClose }: {
                   <FieldLabel htmlFor="u-name">Full name</FieldLabel>
                   <Input id="u-name" required value={form.full_name} onChange={set("full_name")} />
                 </Field>
+                {state?.mode === "new" && (
+                  <Field>
+                    <FieldLabel htmlFor="u-username">Username</FieldLabel>
+                    <Input id="u-username" required minLength={3} pattern="[a-zA-Z0-9._-]+" autoCapitalize="none" value={form.username}
+                      onChange={set("username")} />
+                    <FieldDescription>Used to log in. Letters, numbers, dots, dashes.</FieldDescription>
+                  </Field>
+                )}
                 {state?.mode === "new" && (
                   <Field>
                     <FieldLabel htmlFor="u-email">Email</FieldLabel>

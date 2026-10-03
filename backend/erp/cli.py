@@ -2,7 +2,7 @@
 
   migrate                   create/upgrade the database schema (Alembic)
   seed [--reset]            demo company with a year of history (refuses if data exists)
-  create-admin EMAIL NAME   an administrator account; asks for the password
+  create-admin USERNAME EMAIL NAME   an administrator account; asks for the password
 """
 
 import argparse
@@ -57,20 +57,20 @@ def main() -> None:
             started = time.monotonic()
             result = seed(db)
         print(f"Seeded in {time.monotonic() - started:.0f}s. Log in with any of:")
-        for email in result["users"]:
-            print(f"  {email} / {result['password']}")
+        for username in result["users"]:
+            print(f"  {username} / {result['password']}")
         return
 
-    if len(args.args) != 2:
-        sys.exit('usage: create-admin EMAIL "FULL NAME"')
-    email, name = args.args
+    if len(args.args) != 3:
+        sys.exit('usage: create-admin USERNAME EMAIL "FULL NAME"')
+    username, email, name = args.args
     password = getpass.getpass("Password (8+ characters): ")
     if len(password) < 8:
         sys.exit("Password too short.")
     with factory() as db:
-        db.add(User(email=email.lower(), full_name=name, role="admin", password_hash=hash_password(password)))
+        db.add(User(username=username.lower(), email=email.lower(), full_name=name, role="admin", password_hash=hash_password(password)))
         db.commit()
-    print(f"Administrator {email} created.")
+    print(f"Administrator {username} created.")
 
 
 if __name__ == "__main__":

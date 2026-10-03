@@ -1,4 +1,5 @@
 from alembic import context
+from sqlalchemy import create_engine
 
 from erp.config import get_settings
 from erp.db import make_engine
@@ -16,8 +17,10 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    # Same URL handling as the app (ERP_DATABASE_URL, postgres:// rewriting).
-    engine = make_engine(get_settings().database_url)
+    url = get_settings().database_url
+    # Same URL handling as the app (ERP_DATABASE_URL, postgres:// rewriting). On SQLite, a plain
+    # connection: batch migrations rebuild tables, which the app's foreign-key enforcement blocks.
+    engine = create_engine(url) if url.startswith("sqlite") else make_engine(url)
     with engine.connect() as connection:
         # Batch mode lets ALTERs work on SQLite too.
         context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)

@@ -95,7 +95,7 @@ def at_noon(on: date) -> datetime:
 # ---------------------------------------------------------------- settings
 
 DEFAULT_SETTINGS = {
-    "company_name": "Kios Gawai Nusantara",
+    "company_name": "Kios Gawai",
     "company_address": "Jl. Sudirman No. 1, Jakarta",
     "company_phone": "",
     "company_email": "",
