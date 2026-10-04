@@ -15,7 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
@@ -30,11 +30,12 @@ from ..models import (
     SalesOrderLine,
     SalesReturn,
     StockLevel,
+    User,
     Warehouse,
     today,
     utcnow,
 )
-from ..permissions import permissions_for
+from ..permissions import ROLES, permissions_for
 from ..services import auth as auth_svc
 from ..services import finance as finance_svc
 from ..services import inventory as inventory_svc
@@ -48,7 +49,7 @@ router = APIRouter(prefix="/api/integration/v1", tags=["integration API"])
 
 # Grows when the API gains something a caller may want to check for before relying on it.
 API_FEATURES = ["paid_sales", "line_discounts", "customer_create", "cashier_login", "supervisors", "returns",
-                "promotions", "loyalty", "stock_requests"]
+                "promotions", "loyalty", "stock_requests", "cashier_profile"]
 
 
 class TokenIn(BaseModel):
@@ -106,6 +107,42 @@ def cashier_login(body: CashierLogin, db: Db, _: Client) -> dict:
         raise DomainError(403, "Only cashier accounts can use the POS. Ask an administrator for one.")
     db.commit()  # last login, cleared failure count
     return {"username": user.username, "full_name": user.full_name, "email": user.email}
+
+
+def cashier_out(user) -> dict:
+    return {"username": user.username, "full_name": user.full_name, "email": user.email,
+            "role": ROLES.get(user.role, {}).get("label", user.role), "active": user.active,
+            "created_at": user.created_at, "last_login_at": user.last_login_at}
+
+
+@router.get("/cashiers/{username}")
+def cashier_profile(username: str, db: Db, _: Client) -> dict:
+    """A cashier's account as the ERP holds it, for their profile page at the till."""
+    user = db.scalar(select(User).where(func.lower(User.username) == username.strip().lower()))
+    if user is None or "pos.sell" not in permissions_for(user.role):
+        raise HTTPException(404, "cashier not found")
+    return cashier_out(user)
+
+
+class PasswordChange(BaseModel):
+    username: str = Field(min_length=1, max_length=120)
+    current_password: str = Field(min_length=1, max_length=200)
+    new_password: str = Field(min_length=8, max_length=200)
+
+
+@router.post("/cashiers/password")
+def change_cashier_password(body: PasswordChange, db: Db, client: Client) -> dict:
+    """A cashier changes their own password at a till. The current one is checked with the usual
+    lockout, so a till left logged in can't be used to take the account over."""
+    user = auth_svc.authenticate(db, body.username, body.current_password)
+    if "pos.sell" not in permissions_for(user.role):
+        raise DomainError(403, "Only cashier accounts change their password at the POS.")
+    if body.new_password == body.current_password:
+        raise DomainError(422, "Pick a password different from the current one.")
+    user.password_hash = auth_svc.hash_password(body.new_password)
+    log(db, None, "user", user.id, "password", f"{user.username} changed their password at {client.name}")
+    db.commit()
+    return cashier_out(user)
 
 
 @router.post("/supervisors/verify")

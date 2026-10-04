@@ -135,3 +135,20 @@ def test_stock_request_drafts_a_transfer_from_the_fullest_warehouse(app, admin):
     nothing = pos.post(f"{API}/stock-requests", json={"warehouse_id": warehouse["id"], "requested_by": "Putri",
                                                         "lines": [{"product_id": product["id"], "qty": 1}]})
     assert nothing.status_code == 409  # Bandung has none to send to Jakarta
+
+
+def test_cashier_profile_and_password_change(app, admin):
+    pos = integration_client(admin, app)
+    profile = ok(pos.get(f"{API}/cashiers/Cashier"))
+    assert profile["username"] == "cashier" and profile["role"] == "Cashier" and profile["email"] == "cashier@test.dev"
+    assert pos.get(f"{API}/cashiers/sales").status_code == 404  # not a till account
+
+    body = {"username": "cashier", "current_password": PASSWORD, "new_password": "new-secret-1"}
+    assert pos.post(f"{API}/cashiers/password", json={**body, "current_password": "nope"}).status_code == 401
+    assert pos.post(f"{API}/cashiers/password", json={**body, "new_password": PASSWORD}).status_code == 422
+    assert pos.post(f"{API}/cashiers/password", json={**body, "new_password": "short"}).status_code == 422
+    ok(pos.post(f"{API}/cashiers/password", json=body))
+    assert pos.post(f"{API}/cashiers/login", json={"username": "cashier", "password": PASSWORD}).status_code == 401
+    ok(pos.post(f"{API}/cashiers/login", json={"username": "cashier", "password": "new-secret-1"}))
+    assert pos.post(f"{API}/cashiers/password", json={"username": "sales", "current_password": PASSWORD,
+                                                      "new_password": "new-secret-1"}).status_code == 403
